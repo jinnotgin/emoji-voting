@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Emoji Voting</title>
+</head>
+<style>
+	body {
+		display: flex;
+		flex-direction: column;
+		min-height: 100vh;
+		margin: 0;
+	}
+	
+	#emoji-container {
+		display: grid;
+		grid-template-columns: repeat(2, 1fr);
+		gap: 10px;
+		padding: 20px;
+		margin-top: auto;
+	}
+
+	.emoji-button {
+		font-size: 24px;
+		padding: 10px;
+		border: none;
+		background-color: #f0f0f0;
+		cursor: pointer;
+	}
+
+	.emoji-button.selected {
+		background-color: #4CAF50;
+		color: white;
+	}
+</style>
+<body>
+  <h1>Emoji Voting</h1>
+  <div id="emoji-container"></div>
+
+	<!-- Include the Firebase SDK -->
+	<script type="module">
+		import { nanoid } from 'https://cdn.jsdelivr.net/npm/nanoid/nanoid.js'
+		// Import the functions you need from the SDKs you need
+		import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
+		import {
+			getFirestore,
+			doc,
+			getDoc,
+			setDoc,
+			updateDoc,
+		} from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
+
+// Your web app's Firebase configuration
+		const firebaseConfig = {
+			apiKey: "AIzaSyDzefW9UONfQnAnBZGziLEXKgzWPP0aTO8",
+			authDomain: "emoji-voting.firebaseapp.com",
+			projectId: "emoji-voting",
+			storageBucket: "emoji-voting.appspot.com",
+			messagingSenderId: "1072768047554",
+			appId: "1:1072768047554:web:3671bc75afeefa66495e5b",
+		};
+			// Initialize Firebase
+			const firebaseApp = initializeApp(firebaseConfig);
+			// Get a reference to the Firestore database
+			var db = getFirestore(firebaseApp);
+
+    // Get session ID and available emojis from URL params
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get('sessionId');
+    const availableEmojis = urlParams.get('emojis').split(',');
+
+		// Generate a unique user ID using nanoid or retrieve from localStorage
+		let userId = localStorage.getItem('userId');
+		if (!userId) {
+			userId = nanoid();
+			localStorage.setItem('userId', userId);
+		}
+
+    // Display available emojis for voting
+		const emojiContainer = document.getElementById('emoji-container');
+		availableEmojis.forEach(emoji => {
+			const emojiButton = document.createElement('button');
+			emojiButton.classList.add('emoji-button');
+			emojiButton.textContent = emoji;
+			emojiButton.addEventListener('click', () => {
+				voteForEmoji(emoji);
+			});
+			emojiContainer.appendChild(emojiButton);
+		});
+
+    // Function to handle voting for an emoji
+    async function voteForEmoji(emoji) {
+			const voteRef = doc(db, "sessions", sessionId, "votes", userId);
+    	const timestamp = new Date().toISOString();
+
+			try {
+				const voteDoc = await getDoc(voteRef);
+
+				if (voteDoc.exists()) {
+      		// User's vote document exists, update the emoji field
+					await updateDoc(voteRef, {
+						emoji: emoji,
+						timestamp: timestamp
+					});
+					console.log('Vote updated successfully');
+				} else {
+					// User's vote document doesn't exist, create a new document with the emoji field
+					await setDoc(voteRef, {
+						emoji: emoji,
+						timestamp: timestamp
+					});
+					console.log('Vote submitted successfully');
+				}
+
+				// Update the selected state of the buttons
+				updateSelectedState(emoji);
+			} catch (error) {
+				console.error('Error handling vote:', error);
+			}
+    }
+
+		// Function to update the selected state of the buttons
+		function updateSelectedState(selectedEmoji) {
+			const emojiButtons = document.querySelectorAll('.emoji-button');
+			emojiButtons.forEach(button => {
+				if (button.textContent === selectedEmoji) {
+					button.classList.add('selected');
+				} else {
+					button.classList.remove('selected');
+				}
+			});
+		}
+
+		// Check if the user has previously voted and update the selected state
+		async function checkPreviousVote() {
+			const voteRef = doc(db, "sessions", sessionId, "votes", userId);
+			const voteDoc = await getDoc(voteRef);
+
+			if (voteDoc.exists()) {
+				const selectedEmoji = voteDoc.data().emoji;
+				updateSelectedState(selectedEmoji);
+			}
+		}
+
+		// Call the checkPreviousVote function when the page loads
+		checkPreviousVote();
+  </script>
+</body>
+</html>
