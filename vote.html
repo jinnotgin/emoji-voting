@@ -1,7 +1,9 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-  <title>Emoji Voting</title>
+	<title>Emoji Voting</title>
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
 </head>
 <style>
 	body {
@@ -10,7 +12,7 @@
 		min-height: 100vh;
 		margin: 0;
 	}
-	
+
 	#emoji-container {
 		display: grid;
 		grid-template-columns: repeat(2, 1fr);
@@ -25,16 +27,23 @@
 		border: none;
 		background-color: #f0f0f0;
 		cursor: pointer;
+		transition: transform 0.2s;
+
 	}
 
 	.emoji-button.selected {
 		background-color: #4CAF50;
 		color: white;
 	}
+
+	.emoji-button:active {
+		transform: scale(0.85);
+	}
 </style>
+
 <body>
-  <h1>Emoji Voting</h1>
-  <div id="emoji-container"></div>
+	<h1>Emoji Voting</h1>
+	<div id="emoji-container"></div>
 
 	<!-- Include the Firebase SDK -->
 	<script type="module">
@@ -49,7 +58,7 @@
 			updateDoc,
 		} from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
 
-// Your web app's Firebase configuration
+		// Your web app's Firebase configuration
 		const firebaseConfig = {
 			apiKey: "AIzaSyDzefW9UONfQnAnBZGziLEXKgzWPP0aTO8",
 			authDomain: "emoji-voting.firebaseapp.com",
@@ -58,15 +67,18 @@
 			messagingSenderId: "1072768047554",
 			appId: "1:1072768047554:web:3671bc75afeefa66495e5b",
 		};
-			// Initialize Firebase
-			const firebaseApp = initializeApp(firebaseConfig);
-			// Get a reference to the Firestore database
-			var db = getFirestore(firebaseApp);
+		// Initialize Firebase
+		const firebaseApp = initializeApp(firebaseConfig);
+		// Get a reference to the Firestore database
+		var db = getFirestore(firebaseApp);
 
-    // Get session ID and available emojis from URL params
-    const urlParams = new URLSearchParams(window.location.search);
-    const sessionId = urlParams.get('sessionId');
-    const availableEmojis = urlParams.get('emojis').split(',');
+		// Get session ID and available emojis from URL params
+		const urlParams = new URLSearchParams(window.location.search);
+		const sessionId = urlParams.get('sessionId');
+		const defaultEmojis = ["😀", "✨", "🐻", "💖", "🐶"];
+		const availableEmojis = urlParams.get('emojis')
+			? urlParams.get('emojis').split(',')
+			: defaultEmojis;
 
 		// Generate a unique user ID using nanoid or retrieve from localStorage
 		let userId = localStorage.getItem('userId');
@@ -75,7 +87,7 @@
 			localStorage.setItem('userId', userId);
 		}
 
-    // Display available emojis for voting
+		// Display available emojis for voting
 		const emojiContainer = document.getElementById('emoji-container');
 		availableEmojis.forEach(emoji => {
 			const emojiButton = document.createElement('button');
@@ -87,16 +99,16 @@
 			emojiContainer.appendChild(emojiButton);
 		});
 
-    // Function to handle voting for an emoji
-    async function voteForEmoji(emoji) {
+		// Function to handle voting for an emoji
+		async function voteForEmoji(emoji) {
 			const voteRef = doc(db, "sessions", sessionId, "votes", userId);
-    	const timestamp = new Date().toISOString();
+			const timestamp = new Date().toISOString();
 
 			try {
 				const voteDoc = await getDoc(voteRef);
 
 				if (voteDoc.exists()) {
-      		// User's vote document exists, update the emoji field
+					// User's vote document exists, update the emoji field
 					await updateDoc(voteRef, {
 						emoji: emoji,
 						timestamp: timestamp
@@ -116,7 +128,7 @@
 			} catch (error) {
 				console.error('Error handling vote:', error);
 			}
-    }
+		}
 
 		// Function to update the selected state of the buttons
 		function updateSelectedState(selectedEmoji) {
@@ -143,6 +155,7 @@
 
 		// Call the checkPreviousVote function when the page loads
 		checkPreviousVote();
-  </script>
+	</script>
 </body>
+
 </html>
