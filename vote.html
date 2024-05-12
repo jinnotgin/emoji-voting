@@ -139,6 +139,7 @@
 
 			// Function to handle voting for an emoji
 			async function voteForEmoji(emoji) {
+				let userId = nanoid();
 				const voteRef = doc(db, "sessions", sessionId, "votes", userId);
 				const timestamp = new Date().toISOString();
 

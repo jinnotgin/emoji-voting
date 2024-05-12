@@ -62,6 +62,7 @@
 				getDocs,
 				deleteDoc,
 				getDoc,
+				writeBatch,
 			} from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
 
 			// Firebase configuration (replace with your own)
@@ -90,97 +91,100 @@
 				if (sessionSnapshot.exists()) {
 					const sessionData = sessionSnapshot.data();
 					document.getElementById("titleInput").value = sessionData.title || "";
-					document.getElementById("emojisInput").value = sessionData.emojis ? sessionData.emojis.join(", ") : "";
+					document.getElementById("emojisInput").value = sessionData.emojis
+						? sessionData.emojis.join(", ")
+						: "";
 				}
 			}
 
+			// Function to update the session title
+			async function updateSessionTitle() {
+				if (!secretKey) {
+					alert("Secret key is missing. Please provide a valid secret key.");
+					return;
+				}
+				const newTitle = document.getElementById("titleInput").value;
+				const sessionRef = doc(db, "sessions", sessionId);
+				try {
+					await updateDoc(sessionRef, { title: newTitle, secretKey });
+					alert("Session title updated successfully!");
+				} catch (error) {
+					console.error("Error updating session title:", error);
+					alert("An error occurred while updating the session title.");
+				}
+			}
 
-  // Function to update the session title
-  async function updateSessionTitle() {
-    if (!secretKey) {
-      alert("Secret key is missing. Please provide a valid secret key.");
-      return;
-    }
-    const newTitle = document.getElementById("titleInput").value;
-    const sessionRef = doc(db, "sessions", sessionId);
-    try {
-      await updateDoc(sessionRef, { title: newTitle, secretKey });
-      alert("Session title updated successfully!");
-    } catch (error) {
-      console.error("Error updating session title:", error);
-      alert("An error occurred while updating the session title.");
-    }
-  }
+			// Function to update the emoji options
+			async function updateEmojiOptions() {
+				if (!secretKey) {
+					alert("Secret key is missing. Please provide a valid secret key.");
+					return;
+				}
+				const newEmojis = document
+					.getElementById("emojisInput")
+					.value.split(",")
+					.filter(Boolean);
+				if (newEmojis.length > 0) {
+					const sessionRef = doc(db, "sessions", sessionId);
+					try {
+						await updateDoc(sessionRef, { emojis: newEmojis, secretKey });
+						alert("Emoji options updated successfully!");
+					} catch (error) {
+						console.error("Error updating emoji options:", error);
+						alert("An error occurred while updating the emoji options.");
+					}
+				} else {
+					alert("Please provide at least one emoji option.");
+				}
+			}
 
-  // Function to update the emoji options
-  async function updateEmojiOptions() {
-    if (!secretKey) {
-      alert("Secret key is missing. Please provide a valid secret key.");
-      return;
-    }
-    const newEmojis = document
-      .getElementById("emojisInput")
-      .value.split(",")
-      .filter(Boolean);
-    if (newEmojis.length > 0) {
-      const sessionRef = doc(db, "sessions", sessionId);
-      try {
-        await updateDoc(sessionRef, { emojis: newEmojis, secretKey });
-        alert("Emoji options updated successfully!");
-      } catch (error) {
-        console.error("Error updating emoji options:", error);
-        alert("An error occurred while updating the emoji options.");
-      }
-    } else {
-      alert("Please provide at least one emoji option.");
-    }
-  }
+			// Function to clear all votes
+			async function clearAllVotes() {
+				if (!secretKey) {
+					alert("Secret key is missing. Please provide a valid secret key.");
+					return;
+				}
+				const votesRef = collection(db, "sessions", sessionId, "votes");
+				try {
+					const snapshot = await getDocs(votesRef);
+					const batch = writeBatch(db);
+					snapshot.forEach((doc) => {
+						batch.delete(doc.ref);
+					});
+					await batch.commit();
+					alert("All votes cleared successfully!");
+				} catch (error) {
+					console.error("Error clearing votes:", error);
+					alert("An error occurred while clearing the votes.");
+				}
+			}
 
-  // Function to clear all votes
-  async function clearAllVotes() {
-    if (!secretKey) {
-      alert("Secret key is missing. Please provide a valid secret key.");
-      return;
-    }
-    const votesRef = collection(db, "sessions", sessionId, "votes");
-    try {
-      const snapshot = await getDocs(votesRef);
-      snapshot.forEach(async (doc) => {
-        await deleteDoc(doc.ref);
-      });
-      alert("All votes cleared successfully!");
-    } catch (error) {
-      console.error("Error clearing votes:", error);
-      alert("An error occurred while clearing the votes.");
-    }
-  }
-
-  // Function to update all (title, emojis, and clear votes)
-  async function updateAll() {
-    if (!secretKey) {
-      alert("Secret key is missing. Please provide a valid secret key.");
-      return;
-    }
-    const newTitle = document.getElementById("titleInput").value;
-    const newEmojis = document
-      .getElementById("emojisInput")
-      .value.split(",")
-      .filter(Boolean)
-      .map((item) => item.trim());
-    const sessionRef = doc(db, "sessions", sessionId);
-    const updateData = { title: newTitle, secretKey };
-    if (newEmojis.length > 0) {
-      updateData.emojis = newEmojis;
-    }
-    try {
-      await updateDoc(sessionRef, updateData);
-      await clearAllVotes();
-      alert("Session updated successfully!");
-    } catch (error) {
-      console.error("Error updating session:", error);
-      alert("An error occurred while updating the session.");
-    }
-  }
+			// Function to update all (title, emojis, and clear votes)
+			async function updateAll() {
+				if (!secretKey) {
+					alert("Secret key is missing. Please provide a valid secret key.");
+					return;
+				}
+				const newTitle = document.getElementById("titleInput").value;
+				const newEmojis = document
+					.getElementById("emojisInput")
+					.value.split(",")
+					.filter(Boolean)
+					.map((item) => item.trim());
+				const sessionRef = doc(db, "sessions", sessionId);
+				const updateData = { title: newTitle, secretKey };
+				if (newEmojis.length > 0) {
+					updateData.emojis = newEmojis;
+				}
+				try {
+					await updateDoc(sessionRef, updateData);
+					await clearAllVotes();
+					alert("Session updated successfully!");
+				} catch (error) {
+					console.error("Error updating session:", error);
+					alert("An error occurred while updating the session.");
+				}
+			}
 			// Event listeners for buttons
 			document
 				.getElementById("updateTitleBtn")
@@ -195,8 +199,8 @@
 				.getElementById("updateAllBtn")
 				.addEventListener("click", updateAll);
 
-				// Fetch session data when the page loads
-				fetchSessionData();
+			// Fetch session data when the page loads
+			fetchSessionData();
 		</script>
 	</body>
 </html>
