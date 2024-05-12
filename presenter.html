@@ -1,264 +1,355 @@
 <!DOCTYPE html>
 <html>
-
-<head>
-	<title>Presenter View - Live Emoji Voting</title>
-	<style>
-		/* Add your CSS styles here */
-	</style>
-</head>
-
-<body>
-	<h1>Live Emoji Voting Results</h1>
-	<div id="sessionID"></div>
-	<div id="votingLink"></div>
-
-	<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.18.0/matter.min.js"></script>
-
-	<!-- Include the Firebase SDK -->
-	<script type="module">
-
-		const emojiOptions = ["😀", "✨", "🐻", "💖", "🐶"];
-
-		// Import the functions you need from the SDKs you need
-		import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
-		import {
-			getFirestore,
-			collection,
-			onSnapshot,
-		} from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
-
-		// Your web app's Firebase configuration
-		const firebaseConfig = {
-			apiKey: "AIzaSyDzefW9UONfQnAnBZGziLEXKgzWPP0aTO8",
-			authDomain: "emoji-voting.firebaseapp.com",
-			projectId: "emoji-voting",
-			storageBucket: "emoji-voting.appspot.com",
-			messagingSenderId: "1072768047554",
-			appId: "1:1072768047554:web:3671bc75afeefa66495e5b",
-		};
-
-		// Initialize Firebase
-		const firebaseApp = initializeApp(firebaseConfig);
-		// Get a reference to the Firestore database
-		var db = getFirestore(firebaseApp);
-
-		var sessionID = getSessionID();
-
-		// Display the session ID on the page
-		document.getElementById("sessionID").textContent = "Session ID: " + sessionID;
-
-		function getDirectoryPath(location) {
-			const protocol = location.protocol;
-			const pathname = location.pathname;
-			const pathParts = pathname.split('/');
-			pathParts.pop(); // Remove the last part (file name)
-			const directoryPath = protocol + '//' + pathParts.join('/');
-			return directoryPath + '/';
-		}
-
-		// Create the voting link
-		var baseURL = getDirectoryPath(location);
-		var votingLink = baseURL + "vote.html?sessionId=" + sessionID + "&emojis=" + encodeURIComponent(emojiOptions.join(","));
-		document.getElementById("votingLink").innerHTML = '<a href="' + votingLink + '">Voting Link</a>';
-
-		// Create the Matter.js engine
-		var engine = Matter.Engine.create();
-
-		// Create the renderer
-		var render = Matter.Render.create({
-			element: document.body,
-			engine: engine,
-			options: {
-				width: window.innerWidth,
-				height: 850,
-				fillStyle: "blue",
-				wireframes: false,
-				// Customize the renderer options as needed
-			},
-		});
-
-		// Run the engine and renderer
-		Matter.Engine.run(engine);
-		Matter.Render.run(render);
-		// Matter.Resolver._restingThresh = 1; // default is 4
-
-		// Create the floor
-		var floorThickness = 20;
-		var floorY = render.options.height - floorThickness / 2;
-		var floor = Matter.Bodies.rectangle(
-			render.options.width / 2,
-			floorY,
-			render.options.width,
-			floorThickness,
-			{
-				isStatic: true,
-				render: {
-					fillStyle: "green",
-				},
+	<head>
+		<title>Presenter View - Live Emoji Voting</title>
+		<style>
+			body {
+				font-family: sans-serif;
+				display: flex;
+				flex-direction: column;
+				align-items: center;
+				margin: 0;
+				padding: 0;
 			}
-		);
-		Matter.World.add(engine.world, floor);
 
-		// Create the walls
-		var wallWidth = 0.015 * render.options.width;
-		var wallHeight = render.options.height;
-		var wallInterval = 0.18 * render.options.width;
-		var walls = [];
+			.header {
+				display: flex;
+				justify-content: space-between;
+				align-items: center;
+				width: 100%;
+				padding: 20px;
+				box-sizing: border-box;
+			}
 
-		for (var i = 0; i < emojiOptions.length + 1; i++) {
-			var wallX = i * (wallWidth + wallInterval) + wallWidth / 2;
-			var wallY = wallHeight / 2;
+			#title {
+				margin: 0;
+				font-size: 2.5rem;
+			}
 
-			var wall = Matter.Bodies.rectangle(
-				wallX,
-				wallY,
-				wallWidth,
-				wallHeight,
-				{
-					isStatic: true,
-					render: {
-						fillStyle: "grey",
-						strokeStyle: "white",
-						lineWidth: wallInterval,
+			#qrcode img {
+				height: 17.5lvh;
+				aspect-ratio: 1;
+				margin: 0 auto;
+			}
+
+			#qrcodeLink {
+				margin-left: auto;
+			}
+
+			#renderEnvironment {
+				width: 100%;
+				flex-grow: 1;
+			}
+		</style>
+	</head>
+
+	<body>
+		<div class="header">
+			<h1 id="title">Live Emoji Voting Results</h1>
+			<!-- <div id="sessionId"></div> -->
+			<a id="qrcodeLink" href="#" target="_blank"><div id="qrcode"></div></a>
+		</div>
+		<div id="renderEnvironment"></div>
+
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/matter-js/0.18.0/matter.min.js"></script>
+		<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+
+		<!-- Include the Firebase SDK -->
+		<script type="module">
+			let emojiOptions = [];
+			let engine, render;
+
+			// Import the functions you need from the SDKs you need
+			import { initializeApp } from "https://www.gstatic.com/firebasejs/10.11.1/firebase-app.js";
+			import {
+				getFirestore,
+				getDoc,
+				doc,
+				collection,
+				onSnapshot,
+			} from "https://www.gstatic.com/firebasejs/10.11.1/firebase-firestore.js";
+
+			// Your web app's Firebase configuration
+			const firebaseConfig = {
+				apiKey: "AIzaSyDzefW9UONfQnAnBZGziLEXKgzWPP0aTO8",
+				authDomain: "emoji-voting.firebaseapp.com",
+				projectId: "emoji-voting",
+				storageBucket: "emoji-voting.appspot.com",
+				messagingSenderId: "1072768047554",
+				appId: "1:1072768047554:web:3671bc75afeefa66495e5b",
+			};
+
+			// Initialize Firebase
+			const firebaseApp = initializeApp(firebaseConfig);
+			// Get a reference to the Firestore database
+			var db = getFirestore(firebaseApp);
+
+			var sessionId = getsessionId();
+
+			// Display the session ID on the page
+			// document.getElementById("sessionId").textContent =
+			// 	"Session ID: " + sessionId;
+
+			async function fetchEmojisFromSession() {
+				const sessionRef = doc(db, "sessions", sessionId);
+				const sessionDoc = await getDoc(sessionRef);
+
+				if (sessionDoc.exists()) {
+					const sessionData = sessionDoc.data();
+					if (sessionData.emojis && Array.isArray(sessionData.emojis)) {
+						emojiOptions.push(...sessionData.emojis);
+					}
+				} else {
+					console.error("Session document not found");
+				}
+
+				// Create the voting link after fetching the emojis
+				createVotingQr();
+				renderEnvironment();
+				listenToSessionTitle();
+			}
+
+			fetchEmojisFromSession();
+
+			function getDirectoryPath(location) {
+				const origin = location.origin;
+				const pathname = location.pathname;
+				const pathParts = pathname.split("/");
+				pathParts.pop(); // Remove the last part (file name)
+				const directoryPath = origin + "//" + pathParts.join("/");
+				return directoryPath + "/";
+			}
+
+			function createVotingQr() {
+				// Create the voting link
+				var baseURL = getDirectoryPath(location);
+				var votingLink = baseURL + "vote.html?sessionId=" + sessionId;
+				// "&emojis=" +
+				// encodeURIComponent(emojiOptions.join(","));
+
+				// document.getElementById("votingLink").innerHTML =
+				// 	'<a href="' + votingLink + '">Voting Link</a>';
+				new QRCode(document.getElementById("qrcode"), votingLink);
+			}
+
+			function renderEnvironment() {
+				// Create the Matter.js engine
+				engine = Matter.Engine.create();
+
+				// Create the renderer
+				render = Matter.Render.create({
+					element: document.getElementById("renderEnvironment"),
+					engine: engine,
+					options: {
+						width: window.innerWidth,
+						height: Math.max(500, window.innerWidth * 0.75),
+						fillStyle: "blue",
+						wireframes: false,
+						// Customize the renderer options as needed
 					},
+				});
+
+				// Run the engine and renderer
+				Matter.Engine.run(engine);
+				Matter.Render.run(render);
+				// Matter.Resolver._restingThresh = 1; // default is 4
+
+				// Create the floor
+				var floorThickness = 20;
+				var floorY = render.options.height - floorThickness / 2;
+				var floor = Matter.Bodies.rectangle(
+					render.options.width / 2,
+					floorY,
+					render.options.width,
+					floorThickness,
+					{
+						isStatic: true,
+						render: {
+							fillStyle: "white",
+						},
+					}
+				);
+				Matter.World.add(engine.world, floor);
+
+				// Create the walls
+				var wallWidth = 0.015 * render.options.width;
+				var wallHeight = render.options.height;
+				var wallInterval = 0.18 * render.options.width;
+				var walls = [];
+
+				for (var i = 0; i < emojiOptions.length + 1; i++) {
+					var wallX = i * (wallWidth + wallInterval) + wallWidth / 2;
+					var wallY = wallHeight / 2;
+
+					var wall = Matter.Bodies.rectangle(
+						wallX,
+						wallY,
+						wallWidth,
+						wallHeight,
+						{
+							isStatic: true,
+							render: {
+								fillStyle: "grey",
+								strokeStyle: "white",
+								lineWidth: wallInterval,
+							},
+						}
+					);
+
+					walls.push(wall);
+					Matter.World.add(engine.world, wall);
+				}
+			}
+
+			// Function to listen to changes in the session data
+			function listenToSessionTitle() {
+				const sessionRef = doc(db, "sessions", sessionId);
+				onSnapshot(
+					sessionRef,
+					(doc) => {
+						if (doc.exists()) {
+							const sessionTitle = doc.data().title;
+							document.title = sessionTitle;
+							document.getElementById("title").textContent = sessionTitle;
+						} else {
+							console.error("Session document not found");
+						}
+					},
+					(error) => {
+						console.error("Error listening to session title changes:", error);
+					}
+				);
+			}
+
+			// Call the listenToSessionTitle function when the page loads
+			listenToSessionTitle();
+
+			var votingData = {};
+
+			// Listen for changes in the voting data
+			onSnapshot(
+				collection(db, "sessions", sessionId, "votes"),
+				(querySnapshot) => {
+					querySnapshot.forEach((doc) => {
+						votingData[doc.id] = {
+							emoji: doc.data().emoji,
+							timestamp: doc.data().timestamp,
+						};
+					});
+					console.log("Current voting data: ", votingData);
+					updateVotingResults(votingData);
 				}
 			);
 
-			walls.push(wall);
-			Matter.World.add(engine.world, wall);
-		}
-
-		var votingData = {};
-
-		// Listen for changes in the voting data
-		onSnapshot(
-			collection(db, "sessions", sessionID, "votes"),
-			(querySnapshot) => {
-				querySnapshot.forEach((doc) => {
-					votingData[doc.id] = {
-						emoji: doc.data().emoji,
-						timestamp: doc.data().timestamp,
-					};
-				});
-				console.log("Current voting data: ", votingData);
-				updateVotingResults(votingData);
-			}
-		);
-
-		let previous_votingData = {};
-		let emojiBodies = {};
-
-		function createEmojiBody(emoji, x, y, userID, timestamp) {
-			if (!emojiBodies?.[emoji]) {
-				emojiBodies[emoji] = [];
-			}
-			var emojiBody = Matter.Bodies.circle(x, y, 20, {
-				restitution: 0.5,
-				friction: 0.4,
-				render: {
-					sprite: {
-						texture: getEmojiTexture(emoji),
-						xScale: 0.27,
-						yScale: 0.27,
+			let previous_votingData = {};
+			let emojiBodies = {};
+			function createEmojiBody(emoji, x, y, userID, timestamp) {
+				if (!emojiBodies?.[emoji]) {
+					emojiBodies[emoji] = [];
+				}
+				var emojiBody = Matter.Bodies.circle(x, y, 20, {
+					restitution: 0.5,
+					friction: 0.4,
+					render: {
+						sprite: {
+							texture: getEmojiTexture(emoji),
+							xScale: 0.27,
+							yScale: 0.27,
+						},
 					},
-				},
-				userID: userID,
-				timestamp: timestamp,
-			});
-			Matter.World.add(engine.world, emojiBody);
-			emojiBodies[emoji].push(emojiBody);
-		}
-
-		function getRandomArbitrary(min, max) {
-			return Math.random() * (max - min) + min;
-		}
-
-		// Function to update the voting results on the screen
-		function updateVotingResults(votingData) {
-			// Create emoji bodies with Matter.js
-			for (var userID in votingData) {
-				const selectedEmoji = votingData[userID].emoji;
-				const timestamp = votingData[userID].timestamp;
-
-				if (previous_votingData[userID]) {
-					const previousSelectedEmoji = previous_votingData[userID].emoji;
-					const previousTimestamp = previous_votingData[userID].timestamp;
-
-					if (selectedEmoji !== previousSelectedEmoji) {
-						// Remove the previous emoji body immediately
-						const emojiBodyToRemove = emojiBodies[previousSelectedEmoji].find(
-							(body) => body.userID === userID
-						);
-						if (emojiBodyToRemove) {
-							Matter.World.remove(engine.world, emojiBodyToRemove);
-							emojiBodies[previousSelectedEmoji] = emojiBodies[
-								previousSelectedEmoji
-							].filter((body) => body.userID !== userID);
-						}
-
-						// Create a new emoji body for the updated vote
-						const emojiIndex = emojiOptions.indexOf(selectedEmoji);
-						const offsetRatio = 1 / emojiOptions.length;
-						const startingRatio = offsetRatio / 2;
-
-						const x = (startingRatio + emojiIndex * offsetRatio + getRandomArbitrary(-startingRatio / 2, startingRatio)) * render.options.width;
-						const y = (startingRatio + getRandomArbitrary(0, startingRatio)) * render.options.height;
-						createEmojiBody(selectedEmoji, x, y, userID, timestamp);
-					} else if (timestamp !== previousTimestamp) {
-						// Create a new emoji body for the same vote with a different timestamp
-						const emojiIndex = emojiOptions.indexOf(selectedEmoji);
-						const offsetRatio = 1 / emojiOptions.length;
-						const startingRatio = offsetRatio / 2;
-
-						const x = (startingRatio + emojiIndex * offsetRatio + getRandomArbitrary(-startingRatio / 2, startingRatio)) * render.options.width;
-						const y = (startingRatio + getRandomArbitrary(0, startingRatio)) * render.options.height;
-						createEmojiBody(selectedEmoji, x, y, userID, timestamp);
-
-						// Remove the oldest emoji body of the same type after 5 seconds
-						setTimeout(() => {
-							const oldestEmojiBody = emojiBodies[selectedEmoji].shift();
-							if (oldestEmojiBody) {
-								Matter.World.remove(engine.world, oldestEmojiBody);
-							}
-						}, 2000);
-					}
-				} else {
-					// Create a new emoji body for the new vote
-					const emojiIndex = emojiOptions.indexOf(selectedEmoji);
-					const offsetRatio = 1 / emojiOptions.length;
-					const startingRatio = offsetRatio / 2;
-
-					const x = (startingRatio + emojiIndex * offsetRatio + getRandomArbitrary(-startingRatio / 2, startingRatio)) * render.options.width;
-					const y = (startingRatio + getRandomArbitrary(0, startingRatio)) * render.options.height;
-					createEmojiBody(selectedEmoji, x, y, userID, timestamp);
+					userID: userID,
+					timestamp: timestamp,
+				});
+				Matter.World.add(engine.world, emojiBody);
+				emojiBodies[emoji].push(emojiBody);
+			}
+			function getRandomArbitrary(min, max) {
+				return Math.random() * (max - min) + min;
+			}
+			function getEmojiPosition(emoji) {
+				const emojiIndex = emojiOptions.indexOf(emoji);
+				const offsetRatio = 1 / emojiOptions.length;
+				const startingRatio = offsetRatio / 2;
+				const x =
+					(startingRatio +
+						emojiIndex * offsetRatio +
+						getRandomArbitrary(-startingRatio / 2, startingRatio / 2)) *
+					render.options.width;
+				const y =
+					(startingRatio + getRandomArbitrary(-startingRatio / 2, startingRatio / 2)) *
+					render.options.height;
+				return { x, y };
+			}
+			function removeEmojiBody(emoji, userID) {
+				const emojiBodyToRemove = emojiBodies[emoji].find(
+					(body) => body.userID === userID
+				);
+				if (emojiBodyToRemove) {
+					Matter.World.remove(engine.world, emojiBodyToRemove);
+					emojiBodies[emoji] = emojiBodies[emoji].filter(
+						(body) => body.userID !== userID
+					);
 				}
 			}
+			// Function to update the voting results on the screen
+			function updateVotingResults(votingData) {
+				// Create emoji bodies with Matter.js
+				for (var userID in votingData) {
+					const selectedEmoji = votingData[userID].emoji;
+					const timestamp = votingData[userID].timestamp;
+					if (previous_votingData[userID]) {
+						const previousSelectedEmoji = previous_votingData[userID].emoji;
+						const previousTimestamp = previous_votingData[userID].timestamp;
+						if (selectedEmoji !== previousSelectedEmoji) {
+							// Remove the previous emoji body immediately
+							removeEmojiBody(previousSelectedEmoji, userID);
+							
+							// Create a new emoji body for the updated vote
+							const { x, y } = getEmojiPosition(selectedEmoji);
+							createEmojiBody(selectedEmoji, x, y, userID, timestamp);
+						} else if (false && timestamp !== previousTimestamp) {
+							// disabling spam feature for now
+							// Create a new emoji body for the same vote with a different timestamp
+							const { x, y } = getEmojiPosition(selectedEmoji);
+							createEmojiBody(selectedEmoji, x, y, userID, timestamp);
 
-			previous_votingData = { ...votingData };
-		}
+							// Remove the oldest emoji body of the same type after 5 seconds
+							setTimeout(() => {
+								const oldestEmojiBody = emojiBodies[selectedEmoji].shift();
+								if (oldestEmojiBody) {
+									Matter.World.remove(engine.world, oldestEmojiBody);
+								}
+							}, 2000);
+						}
+					} else {
+						// Create a new emoji body for the new vote
+						const { x, y } = getEmojiPosition(selectedEmoji);
+						createEmojiBody(selectedEmoji, x, y, userID, timestamp);
+					}
+				}
+				previous_votingData = { ...votingData };
+			}
 
-		// Function to map emoji characters to image textures
-		function getEmojiTexture(emoji) {
-			// Map emoji characters to image file paths
-			var emojiTextures = {
-				"😀": "https://em-content.zobj.net/source/apple/391/grinning-face-with-smiling-eyes_1f604.png",
-				"✨": "https://em-content.zobj.net/source/apple/391/sparkles_2728.png",
-				"🐻": "https://em-content.zobj.net/source/apple/391/bear_1f43b.png",
-				"💖": "https://em-content.zobj.net/source/apple/391/sparkling-heart_1f496.png",
-				"🐶": "https://em-content.zobj.net/source/apple/391/dog-face_1f436.png",
-				// ... more emoji mappings
-			};
-			return emojiTextures[emoji];
-		}
+			// Function to map emoji characters to image textures
+			function getEmojiTexture(emoji) {
+				// Map emoji characters to image file paths
+				var emojiTextures = {
+					"😀": "https://em-content.zobj.net/source/apple/391/grinning-face-with-smiling-eyes_1f604.png",
+					"✨": "https://em-content.zobj.net/source/apple/391/sparkles_2728.png",
+					"🐻": "https://em-content.zobj.net/source/apple/391/bear_1f43b.png",
+					"💖": "https://em-content.zobj.net/source/apple/391/sparkling-heart_1f496.png",
+					"🐶": "https://em-content.zobj.net/source/apple/391/dog-face_1f436.png",
+					// ... more emoji mappings
+				};
+				return emojiTextures[emoji];
+			}
 
-		// Function to get the session ID (you can customize this based on your implementation)
-		function getSessionID() {
-			// Example: Get the session ID from the URL query parameter
-			var urlParams = new URLSearchParams(window.location.search);
-			return urlParams.get("sessionID");
-		}
-	</script>
-</body>
-
+			// Function to get the session ID (you can customize this based on your implementation)
+			function getsessionId() {
+				// Example: Get the session ID from the URL query parameter
+				var urlParams = new URLSearchParams(window.location.search);
+				return urlParams.get("sessionId");
+			}
+		</script>
+	</body>
 </html>
