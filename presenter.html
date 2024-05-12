@@ -118,7 +118,7 @@
 				const pathname = location.pathname;
 				const pathParts = pathname.split("/");
 				pathParts.pop(); // Remove the last part (file name)
-				const directoryPath = origin + "//" + pathParts.join("/");
+				const directoryPath = origin + pathParts.join("/");
 				return directoryPath + "/";
 			}
 
