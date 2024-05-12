@@ -132,6 +132,7 @@
 				// document.getElementById("votingLink").innerHTML =
 				// 	'<a href="' + votingLink + '">Voting Link</a>';
 				new QRCode(document.getElementById("qrcode"), votingLink);
+				document.getElementById("qrcodeLink").href = votingLink;
 			}
 
 			function renderEnvironment() {
